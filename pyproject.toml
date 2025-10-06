@@ -16,6 +16,7 @@ dependencies = [
     "langchain-anthropic>=0.3.21",
     "langchain-google-genai>=2.0.10",
     "langgraph>=0.6.8",
+    "playwright>=1.55.0",
     "psutil>=7.1.0",
     "python-dotenv>=1.1.1",
     "rich>=14.1.0",

@@ -32,6 +32,39 @@ async def lifespan(app: FastAPI):
         logger.error(f"Configuration validation failed: {e}")
         raise
 
+    # Pre-compile graphs for all models (synchronous, blocking operation)
+    # This moves the expensive graph creation to startup instead of per-request
+    from ansari_langgraph.graph_provider import initialize_graphs
+
+    logger.info("Pre-compiling LangGraph instances...")
+    initialize_graphs(list(config.MODELS.keys()))
+    logger.info("Graph pre-compilation complete")
+
+    # Start LLM client warm-up in background (non-blocking)
+    # This avoids blocking startup if LLM APIs are unavailable
+    import asyncio
+
+    async def warm_up_clients():
+        """Run LLM client warm-up in the background."""
+        from ansari_langgraph.client_provider import get_llm_with_tools
+        from langchain_core.messages import HumanMessage
+
+        logger.info("Warming up LLM clients in the background...")
+        for model_id in config.MODELS.keys():
+            try:
+                logger.info(f"  - Warming up {model_id}...")
+                client = get_llm_with_tools(model_id)
+                # Make a trivial call to trigger client initialization
+                await client.ainvoke([HumanMessage(content="test")])
+                logger.info(f"  - {model_id} is warm")
+            except Exception as e:
+                # Log the error but don't block startup
+                logger.error(f"  - Failed to warm up {model_id}: {e}", exc_info=True)
+        logger.info("LLM client warm-up complete")
+
+    # Start warm-up as a non-blocking background task
+    asyncio.create_task(warm_up_clients())
+
     # Start background cleanup task
     await session_manager.start_cleanup_task()
     logger.info("Session cleanup task started")

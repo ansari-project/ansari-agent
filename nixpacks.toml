@@ -1,0 +1,13 @@
+# Nixpacks configuration for Railway deployment with uv
+
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
+[phases.install]
+cmds = [
+    "pip install uv",
+    "uv pip install --system -e ."
+]
+
+[start]
+cmd = "PYTHONPATH=src python -m uvicorn model_comparison.app:app --host 0.0.0.0 --port ${PORT:-8000}"

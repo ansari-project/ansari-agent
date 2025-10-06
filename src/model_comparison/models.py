@@ -53,6 +53,7 @@ class ToolStartEvent(SSEEventBase):
     type: Literal["tool_start"] = "tool_start"
     model_id: str
     tool_name: str
+    tool_input: dict = {}
 
 
 class ToolEndEvent(SSEEventBase):
@@ -61,6 +62,14 @@ class ToolEndEvent(SSEEventBase):
     model_id: str
     tool_name: str
     duration_ms: float
+    tool_result: Optional[dict] = None
+
+
+class CitationsEvent(SSEEventBase):
+    """Citations from tool results."""
+    type: Literal["citations"] = "citations"
+    model_id: str
+    citations: list[dict]
 
 
 class DoneEvent(SSEEventBase):
@@ -70,6 +79,8 @@ class DoneEvent(SSEEventBase):
     total_ms: float
     tokens_in: Optional[int] = None
     tokens_out: Optional[int] = None
+    tool_calls: Optional[int] = None
+    cost: Optional[dict] = None  # Pricing information
 
 
 class ErrorEvent(SSEEventBase):
@@ -92,6 +103,7 @@ SSEEvent = (
     | TokenEvent
     | ToolStartEvent
     | ToolEndEvent
+    | CitationsEvent
     | DoneEvent
     | ErrorEvent
     | HeartbeatEvent

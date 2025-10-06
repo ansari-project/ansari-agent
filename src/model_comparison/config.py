@@ -23,7 +23,7 @@ class Config:
 
     # Fairness configuration
     TEMPERATURE = 0.0
-    MAX_TOKENS = 4096
+    MAX_TOKENS = 65536  # Updated to 65536 for all models
     SYSTEM_PROMPT: str | None = None
 
     # Session management
@@ -34,7 +34,7 @@ class Config:
 
     # SSE configuration
     HEARTBEAT_INTERVAL_SECONDS = 10
-    STREAM_TIMEOUT_SECONDS = 25
+    STREAM_TIMEOUT_SECONDS = 90  # Increased to allow multi-turn agent loops
 
     # API keys
     @property

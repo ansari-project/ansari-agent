@@ -11,11 +11,13 @@ from .models import (
     TokenEvent,
     ToolStartEvent,
     ToolEndEvent,
+    CitationsEvent,
     DoneEvent,
     ErrorEvent,
     ChatMessage,
 )
 from .config import config
+from ansari_agent.utils.pricing import calculate_cost, format_cost
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ async def stream_model(
 
     try:
         # Import here to avoid circular imports
-        from ansari_langgraph.graph import create_graph
+        from ansari_langgraph.graph_provider import get_graph
         from ansari_langgraph.state import AnsariState
 
         logger.info(f"[session: {session_id}] [model: {model_id}] Starting stream")
@@ -48,8 +50,18 @@ async def stream_model(
         # Send start event
         await event_queue.put(StartEvent(model_id=model_id))
 
-        # Create agent graph for this model
-        graph = create_graph(model=model_id)
+        # Get pre-compiled graph from cache
+        graph = get_graph(model_id)
+        if not graph:
+            error_msg = f"Graph for model '{model_id}' not found in cache"
+            logger.error(f"[session: {session_id}] [model: {model_id}] {error_msg}")
+            await event_queue.put(
+                ErrorEvent(
+                    model_id=model_id,
+                    error=error_msg,
+                )
+            )
+            return
 
         # Convert messages to LangGraph format
         lg_messages = [
@@ -71,95 +83,139 @@ async def stream_model(
 
         # Track accumulated response
         accumulated_content = ""
+        accumulated_citations = []
         tokens_in = 0
         tokens_out = 0
+        tool_call_count = 0
 
-        # Stream events with timeout
+        # Stream events with timeout using astream_events for token-by-token streaming
+        final_state = None
         async with asyncio.timeout(config.STREAM_TIMEOUT_SECONDS):
-            async for event in graph.astream(initial_state, stream_mode="values"):
-                # Track TTFT
-                if first_token_time is None:
-                    first_token_time = time.time()
-                    ttft_ms = (first_token_time - start_time) * 1000
-                    await event_queue.put(
-                        TTFTEvent(model_id=model_id, ttft_ms=ttft_ms)
-                    )
+            async for event in graph.astream_events(initial_state, version="v2"):
+                kind = event.get("event")
 
-                # Handle tool events
-                if "current_tool" in event and event["current_tool"]:
-                    tool_name = event["current_tool"]
+                # Capture final state from graph
+                if kind == "on_chain_end":
+                    # This fires when the entire graph completes
+                    output = event.get("data", {}).get("output")
+                    if output:
+                        final_state = output
+
+                # Handle token streaming from chat model
+                if kind == "on_chat_model_stream":
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk and hasattr(chunk, 'content') and chunk.content:
+                        # Extract text content (handle both string and list formats)
+                        text_content = ""
+                        if isinstance(chunk.content, str):
+                            text_content = chunk.content
+                        elif isinstance(chunk.content, list):
+                            # Claude returns content as list of blocks
+                            for block in chunk.content:
+                                if isinstance(block, dict) and block.get('type') == 'text':
+                                    text_content += block.get('text', '')
+                                elif hasattr(block, 'text'):
+                                    text_content += block.text
+
+                        if text_content:
+                            # Track TTFT on first token
+                            if first_token_time is None:
+                                first_token_time = time.time()
+                                ttft_ms = (first_token_time - start_time) * 1000
+                                await event_queue.put(
+                                    TTFTEvent(model_id=model_id, ttft_ms=ttft_ms)
+                                )
+
+                            # Send token chunk
+                            await event_queue.put(
+                                TokenEvent(model_id=model_id, content=text_content)
+                            )
+                            accumulated_content += text_content
+
+                # Handle tool start
+                elif kind == "on_tool_start":
+                    data = event.get("data", {})
+                    tool_name = event.get("name", "unknown")
+                    tool_input = data.get("input", {})
+
                     if tool_name not in tool_start_times:
-                        # Tool started
                         tool_start_times[tool_name] = time.time()
+                        tool_call_count += 1  # Count tool calls
                         await event_queue.put(
                             ToolStartEvent(
                                 model_id=model_id,
                                 tool_name=tool_name,
+                                tool_input=tool_input,
                             )
                         )
                         logger.info(
                             f"[session: {session_id}] [model: {model_id}] "
-                            f"Tool started: {tool_name}"
+                            f"Tool started: {tool_name} with input: {tool_input}"
                         )
 
-                # Handle completed tools
-                if "tool_results" in event and event["tool_results"]:
-                    for result in event["tool_results"]:
-                        tool_name = result.get("tool_name", "unknown")
-                        if tool_name in tool_start_times:
-                            duration_ms = (
-                                time.time() - tool_start_times[tool_name]
-                            ) * 1000
-                            await event_queue.put(
-                                ToolEndEvent(
-                                    model_id=model_id,
-                                    tool_name=tool_name,
-                                    duration_ms=duration_ms,
-                                )
+                # Handle tool end
+                elif kind == "on_tool_end":
+                    data = event.get("data", {})
+                    tool_name = event.get("name", "unknown")
+                    tool_output = data.get("output")
+
+                    if tool_name in tool_start_times:
+                        duration_ms = (
+                            time.time() - tool_start_times.pop(tool_name)
+                        ) * 1000
+                        await event_queue.put(
+                            ToolEndEvent(
+                                model_id=model_id,
+                                tool_name=tool_name,
+                                duration_ms=duration_ms,
+                                tool_result=tool_output,
                             )
-                            logger.info(
-                                f"[session: {session_id}] [model: {model_id}] "
-                                f"Tool completed: {tool_name} ({duration_ms:.0f}ms)"
-                            )
+                        )
+                        logger.info(
+                            f"[session: {session_id}] [model: {model_id}] "
+                            f"Tool completed: {tool_name} ({duration_ms:.0f}ms)"
+                        )
 
-                # Handle message updates
-                if "messages" in event and event["messages"]:
-                    last_message = event["messages"][-1]
-                    if last_message.get("role") == "assistant":
-                        raw_content = last_message.get("content", "")
+                        # Extract citations from tool results if present
+                        if isinstance(tool_output, dict) and "results" in tool_output:
+                            accumulated_citations = tool_output.get("results", [])
 
-                        # Extract text from content (may be string or list of blocks)
-                        if isinstance(raw_content, list):
-                            # Content is a list of blocks, extract text
-                            content = ""
-                            for block in raw_content:
-                                if isinstance(block, dict) and "text" in block:
-                                    content += block["text"]
-                                elif isinstance(block, str):
-                                    content += block
-                        else:
-                            # Content is already a string
-                            content = raw_content
+        # Get ACTUAL token counts from final state (includes tool usage)
+        if final_state:
+            tokens_in = final_state.get("input_tokens", 0)
+            tokens_out = final_state.get("output_tokens", 0)
 
-                        if content and content != accumulated_content:
-                            # Send only new content (delta)
-                            delta = content[len(accumulated_content):]
-                            if delta:
-                                await event_queue.put(
-                                    TokenEvent(
-                                        model_id=model_id,
-                                        content=delta,
-                                    )
-                                )
-                            accumulated_content = content
-                            # Rough token estimate
-                            tokens_out = len(content) // 4
+            logger.info(
+                f"[session: {session_id}] [model: {model_id}] "
+                f"Actual token usage from LLM: input={tokens_in}, output={tokens_out}"
+            )
+        else:
+            # Fallback to estimation if state not available (shouldn't happen)
+            logger.warning(
+                f"[session: {session_id}] [model: {model_id}] "
+                f"No final state available, falling back to estimation"
+            )
+            total_input = sum(len(msg.content) for msg in messages)
+            tokens_in = total_input // 4
+            tokens_out = len(accumulated_content) // 4
 
-        # Estimate input tokens
-        total_input = sum(len(msg.content) for msg in messages)
-        tokens_in = total_input // 4
+        # Send citations before completion event
+        if accumulated_citations:
+            await event_queue.put(
+                CitationsEvent(
+                    model_id=model_id,
+                    citations=accumulated_citations,
+                )
+            )
+            logger.info(
+                f"[session: {session_id}] [model: {model_id}] "
+                f"Sent {len(accumulated_citations)} citations"
+            )
 
-        # Send completion event
+        # Calculate pricing (will add the same overhead internally)
+        cost_info = calculate_cost(model_id, tokens_in, tokens_out, tool_call_count)
+
+        # Send completion event with adjusted tokens and pricing
         total_ms = (time.time() - start_time) * 1000
         await event_queue.put(
             DoneEvent(
@@ -167,6 +223,8 @@ async def stream_model(
                 total_ms=total_ms,
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
+                tool_calls=tool_call_count,
+                cost=cost_info,
             )
         )
 

@@ -1,9 +1,7 @@
 """Graph nodes for Ansari LangGraph implementation."""
 
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from ansari_agent.utils import config, setup_logger
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+from ansari_agent.utils import setup_logger
 from ansari_langgraph.state import AnsariState
 from ansari_langgraph.tools import search_quran
 
@@ -20,40 +18,15 @@ When answering questions about Islam, the Quran, or Islamic teachings:
 - Cite your sources using the ayah references"""
 
 
-def create_agent_node(model: str = "claude-sonnet-4-20250514"):
-    """Create an agent node with the specified model (Anthropic or Gemini).
+def create_agent_node(llm_with_tools):
+    """Create an agent node with a pre-configured LLM client.
 
     Args:
-        model: Model identifier (Anthropic or Gemini model name)
+        llm_with_tools: A pre-configured LangChain runnable (LLM bound with tools)
 
     Returns:
         Agent node function
     """
-    # Check if this is a Gemini model
-    is_gemini = model.startswith("gemini")
-
-    if is_gemini:
-        # Initialize ChatGoogleGenerativeAI
-        llm = ChatGoogleGenerativeAI(
-            model=model,
-            google_api_key=config.GOOGLE_API_KEY,
-            max_tokens=1024,
-            temperature=0,
-            streaming=True,
-        )
-    else:
-        # Initialize ChatAnthropic
-        llm = ChatAnthropic(
-            model=model,
-            api_key=config.ANTHROPIC_API_KEY,
-            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-            max_tokens=1024,
-            temperature=0,
-            streaming=True,
-        )
-
-    # Bind tools to the LLM
-    llm_with_tools = llm.bind_tools([search_quran])
 
     async def agent_node(state: AnsariState) -> AnsariState:
         """Agent node - calls LLM with tools using LangChain."""
@@ -66,9 +39,31 @@ def create_agent_node(model: str = "claude-sonnet-4-20250514"):
 
         for msg in messages:
             if msg["role"] == "user":
-                lc_messages.append(HumanMessage(content=msg["content"]))
+                content = msg["content"]
+
+                # Check if content contains tool_result blocks
+                if isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get("type") == "tool_result":
+                    # Convert tool_result blocks to ToolMessage objects
+                    for tool_result in content:
+                        lc_messages.append(ToolMessage(
+                            content=tool_result["content"],
+                            tool_call_id=tool_result["tool_use_id"],
+                        ))
+                else:
+                    # Regular user message
+                    lc_messages.append(HumanMessage(content=content))
+
             elif msg["role"] == "assistant":
-                lc_messages.append(AIMessage(content=msg["content"]))
+                # Check if this message has tool_calls
+                tool_calls = msg.get("tool_calls")
+                if tool_calls:
+                    # Create AIMessage with tool_calls
+                    lc_messages.append(AIMessage(
+                        content=msg.get("content", ""),
+                        tool_calls=tool_calls,
+                    ))
+                else:
+                    lc_messages.append(AIMessage(content=msg["content"]))
 
         # Call LLM with tools
         response = await llm_with_tools.ainvoke(lc_messages)
@@ -93,7 +88,7 @@ def create_agent_node(model: str = "claude-sonnet-4-20250514"):
                 tool_calls.append({
                     "id": tool_call["id"],
                     "name": tool_call["name"],
-                    "input": tool_call["args"],
+                    "args": tool_call["args"],
                 })
                 logger.info(f"Tool call: {tool_call['name']} with input: {tool_call['args']}")
 
@@ -102,9 +97,11 @@ def create_agent_node(model: str = "claude-sonnet-4-20250514"):
 
             # Add assistant message with tool_use to history (in Anthropic format)
             # LangChain's response.content may be empty when there are tool calls
+            # Store tool_calls in the message so we can reconstruct proper LangChain messages
             messages.append({
                 "role": "assistant",
                 "content": response.content or "",
+                "tool_calls": tool_calls,
             })
             state["messages"] = messages
 
@@ -120,6 +117,11 @@ def create_agent_node(model: str = "claude-sonnet-4-20250514"):
                     block.get("text", "") if isinstance(block, dict) else str(block)
                     for block in final_text
                 )
+
+            # Log warning if response is empty
+            if not final_text:
+                logger.warning(f"Empty final response from LLM. Response type: {type(response.content)}, Raw content: {response.content}")
+                logger.warning(f"Full response object: {response}")
 
             state["final_response"] = final_text
             state["stop_reason"] = "end_turn"
@@ -149,7 +151,7 @@ async def tool_node(state: AnsariState) -> AnsariState:
 
     for tool_call in tool_calls:
         tool_name = tool_call["name"]
-        tool_input = tool_call["input"]
+        tool_input = tool_call["args"]
         tool_id = tool_call["id"]
 
         logger.info(f"Executing tool: {tool_name}")
@@ -163,6 +165,8 @@ async def tool_node(state: AnsariState) -> AnsariState:
 
         tool_results.append({
             "tool_use_id": tool_id,
+            "tool_name": tool_name,
+            "tool_input": tool_input,
             "result": result,
         })
 

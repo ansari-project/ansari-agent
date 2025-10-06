@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LLM Model Comparison</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -15,7 +17,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: #f5f7fa;
             color: #2d3748;
-            padding: 20px;
+            padding: 5px;
         }
 
         .container {
@@ -25,35 +27,35 @@
 
         h1 {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 5px;
             color: #1a202c;
-            font-size: 28px;
+            font-size: 16px;
         }
 
         /* Input Section */
         .input-section {
             background: white;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
+            border-radius: 4px;
+            padding: 6px;
+            margin-bottom: 5px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .input-group {
             display: flex;
-            gap: 10px;
+            gap: 6px;
             align-items: stretch;
         }
 
         #query-input {
             flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 15px;
+            padding: 6px 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            font-size: 13px;
             font-family: inherit;
             resize: vertical;
-            min-height: 60px;
+            min-height: 32px;
         }
 
         #query-input:focus {
@@ -64,14 +66,14 @@
         .button-group {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 3px;
         }
 
         button {
-            padding: 12px 24px;
+            padding: 6px 12px;
             border: none;
-            border-radius: 6px;
-            font-size: 14px;
+            border-radius: 4px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
@@ -115,12 +117,12 @@
         .models-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
+            gap: 5px;
         }
 
         .model-panel {
             background: white;
-            border-radius: 8px;
+            border-radius: 4px;
             overflow: hidden;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             display: flex;
@@ -130,7 +132,7 @@
         .model-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 16px 20px;
+            padding: 4px 8px;
         }
 
         .model-panel[data-model-id="gemini-2.5-pro"] .model-header {
@@ -150,16 +152,16 @@
         }
 
         .model-name {
-            font-size: 18px;
+            font-size: 12px;
             font-weight: 700;
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 2px;
         }
 
         .metrics {
             display: flex;
-            gap: 16px;
-            font-size: 13px;
+            gap: 8px;
+            font-size: 10px;
             opacity: 0.95;
         }
 
@@ -167,71 +169,125 @@
             font-family: 'Monaco', 'Consolas', monospace;
         }
 
-        /* Tool Timeline */
-        .tool-timeline {
-            padding: 12px 20px;
+        /* Tool Call Display */
+        .tool-call {
             background: #f7fafc;
-            border-bottom: 1px solid #e2e8f0;
-            min-height: 40px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            padding: 6px;
+            margin: 6px 0;
+            font-size: 10px;
+        }
+
+        .tool-call-header {
+            font-weight: 600;
+            color: #2c5aa0;
+            margin-bottom: 4px;
             display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
             align-items: center;
+            gap: 4px;
         }
 
-        .tool-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            background: #edf2f7;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
+        .tool-call-header.active::before {
+            content: '🔄';
+        }
+
+        .tool-call-header.completed::before {
+            content: '✓';
+            color: #38a169;
+        }
+
+        .tool-call-section {
+            margin: 4px 0;
+            padding: 4px;
+            background: white;
+            border-radius: 2px;
+        }
+
+        .tool-call-label {
+            font-weight: 600;
             color: #4a5568;
+            margin-bottom: 2px;
         }
 
-        .tool-badge.active {
-            background: #bee3f8;
-            color: #2c5282;
-            animation: pulse 1.5s infinite;
-        }
-
-        .tool-badge.completed {
-            background: #c6f6d5;
-            color: #22543d;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-
-        .tool-spinner {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border: 2px solid currentColor;
-            border-top-color: transparent;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .tool-call-content {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 9px;
+            color: #2d3748;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         /* Output Box */
         .output-box {
-            padding: 20px;
-            min-height: 300px;
-            max-height: 600px;
+            padding: 6px;
+            min-height: 200px;
+            max-height: 400px;
             overflow-y: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-size: 14px;
-            line-height: 1.6;
+            font-size: 11px;
+            line-height: 1.5;
             flex: 1;
+        }
+
+        /* Markdown Styling in Output */
+        .output-box h1, .output-box h2, .output-box h3 {
+            margin-top: 6px;
+            margin-bottom: 3px;
+            font-weight: 600;
+        }
+
+        .output-box h1 { font-size: 13px; }
+        .output-box h2 { font-size: 12px; }
+        .output-box h3 { font-size: 11px; }
+
+        .output-box p {
+            margin-bottom: 6px;
+        }
+
+        .output-box ul, .output-box ol {
+            margin-left: 16px;
+            margin-bottom: 6px;
+        }
+
+        .output-box li {
+            margin-bottom: 2px;
+        }
+
+        .output-box code {
+            background: #f7fafc;
+            padding: 1px 3px;
+            border-radius: 2px;
+            font-size: 10px;
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+
+        .output-box pre {
+            background: #f7fafc;
+            padding: 6px;
+            border-radius: 3px;
+            overflow-x: auto;
+            margin-bottom: 6px;
+        }
+
+        .output-box pre code {
+            padding: 0;
+            background: none;
+        }
+
+        .output-box blockquote {
+            border-left: 3px solid #e2e8f0;
+            padding-left: 8px;
+            margin-left: 0;
+            margin-bottom: 6px;
+            color: #718096;
+        }
+
+        .output-box strong {
+            font-weight: 600;
+        }
+
+        .output-box em {
+            font-style: italic;
         }
 
         .output-box.empty {
@@ -260,12 +316,12 @@
         /* Status Bar */
         .status-bar {
             background: white;
-            border-radius: 8px;
-            padding: 12px 20px;
-            margin-top: 20px;
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin-top: 5px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             text-align: center;
-            font-size: 14px;
+            font-size: 11px;
             color: #718096;
         }
 
@@ -312,21 +368,7 @@
 
         <!-- Models Grid -->
         <div class="models-grid">
-            <!-- Gemini 2.5 Pro -->
-            <div class="model-panel" data-model-id="gemini-2.5-pro">
-                <div class="model-header">
-                    <span class="model-name">Gemini 2.5 Pro</span>
-                    <div class="metrics">
-                        <span class="ttft">TTFT: -</span>
-                        <span class="total">Total: -</span>
-                        <span class="tokens">In/Out: -/-</span>
-                    </div>
-                </div>
-                <div class="tool-timeline"></div>
-                <div class="output-box empty">Waiting for input...</div>
-            </div>
-
-            <!-- Gemini 2.5 Flash -->
+            <!-- Gemini 2.5 Flash (Top Left) -->
             <div class="model-panel" data-model-id="gemini-2.5-flash">
                 <div class="model-header">
                     <span class="model-name">Gemini 2.5 Flash</span>
@@ -336,25 +378,10 @@
                         <span class="tokens">In/Out: -/-</span>
                     </div>
                 </div>
-                <div class="tool-timeline"></div>
                 <div class="output-box empty">Waiting for input...</div>
             </div>
 
-            <!-- Claude Opus 4.1 -->
-            <div class="model-panel" data-model-id="claude-opus-4-20250514">
-                <div class="model-header">
-                    <span class="model-name">Claude Opus 4.1</span>
-                    <div class="metrics">
-                        <span class="ttft">TTFT: -</span>
-                        <span class="total">Total: -</span>
-                        <span class="tokens">In/Out: -/-</span>
-                    </div>
-                </div>
-                <div class="tool-timeline"></div>
-                <div class="output-box empty">Waiting for input...</div>
-            </div>
-
-            <!-- Claude Sonnet 4.5 -->
+            <!-- Claude Sonnet 4.5 (Top Right) -->
             <div class="model-panel" data-model-id="claude-sonnet-4-5-20250929">
                 <div class="model-header">
                     <span class="model-name">Claude Sonnet 4.5</span>
@@ -364,7 +391,32 @@
                         <span class="tokens">In/Out: -/-</span>
                     </div>
                 </div>
-                <div class="tool-timeline"></div>
+                <div class="output-box empty">Waiting for input...</div>
+            </div>
+
+            <!-- Gemini 2.5 Pro (Bottom Left) -->
+            <div class="model-panel" data-model-id="gemini-2.5-pro">
+                <div class="model-header">
+                    <span class="model-name">Gemini 2.5 Pro</span>
+                    <div class="metrics">
+                        <span class="ttft">TTFT: -</span>
+                        <span class="total">Total: -</span>
+                        <span class="tokens">In/Out: -/-</span>
+                    </div>
+                </div>
+                <div class="output-box empty">Waiting for input...</div>
+            </div>
+
+            <!-- Claude Opus 4.1 (Bottom Right) -->
+            <div class="model-panel" data-model-id="claude-opus-4-20250514">
+                <div class="model-header">
+                    <span class="model-name">Claude Opus 4.1</span>
+                    <div class="metrics">
+                        <span class="ttft">TTFT: -</span>
+                        <span class="total">Total: -</span>
+                        <span class="tokens">In/Out: -/-</span>
+                    </div>
+                </div>
                 <div class="output-box empty">Waiting for input...</div>
             </div>
         </div>
@@ -398,7 +450,15 @@
             modelState[id] = {
                 content: '',
                 tools: {},
-                metrics: { ttft: null, total: null, tokens_in: null, tokens_out: null }
+                citations: [],
+                metrics: {
+                    ttft: null,
+                    total: null,
+                    tokens_in: null,
+                    tokens_out: null,
+                    tool_calls: null,
+                    cost: null
+                }
             };
         });
 
@@ -417,9 +477,46 @@
             return panel?.querySelector('.output-box');
         }
 
-        function getToolTimeline(modelId) {
-            const panel = getPanel(modelId);
-            return panel?.querySelector('.tool-timeline');
+        function toggleToolDetails(uniqueId) {
+            const details = document.getElementById(uniqueId);
+            const icon = document.getElementById(`icon-${uniqueId}`);
+
+            if (details.style.display === 'none') {
+                details.style.display = 'block';
+                icon.textContent = '▲';
+            } else {
+                details.style.display = 'none';
+                icon.textContent = '▼';
+            }
+        }
+
+        function toggleCitations(citationId) {
+            const citations = document.getElementById(citationId);
+            const icon = document.getElementById(`icon-${citationId}`);
+
+            if (citations.style.display === 'none') {
+                citations.style.display = 'block';
+                icon.textContent = '▲';
+            } else {
+                citations.style.display = 'none';
+                icon.textContent = '▼';
+            }
+        }
+
+        function renderMarkdown(content) {
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                // Sanitize the markdown output to prevent XSS
+                const dirty = marked.parse(content);
+                return DOMPurify.sanitize(dirty);
+            }
+            // Basic escaping for fallback
+            return content
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;")
+                .replace(/\n/g, '<br>');
         }
 
         function updateMetrics(modelId) {
@@ -435,46 +532,142 @@
 
             ttftEl.textContent = `TTFT: ${metrics.ttft !== null ? metrics.ttft.toFixed(0) + 'ms' : '-'}`;
             totalEl.textContent = `Total: ${metrics.total !== null ? metrics.total.toFixed(0) + 'ms' : '-'}`;
-            tokensEl.textContent = `In/Out: ${metrics.tokens_in || '-'}/${metrics.tokens_out || '-'}`;
+
+            // Include tool calls in token display
+            let tokenText = `In/Out: ${metrics.tokens_in || '-'}/${metrics.tokens_out || '-'}`;
+            if (metrics.tool_calls > 0) {
+                tokenText += ` (${metrics.tool_calls} tool${metrics.tool_calls > 1 ? 's' : ''})`;
+            }
+
+            // Add cost if available
+            if (metrics.cost && metrics.cost.total_cost !== undefined) {
+                const cost = metrics.cost.total_cost;
+                const costStr = cost >= 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(6)}`;
+                tokenText += ` | Cost: ${costStr}`;
+            }
+
+            tokensEl.textContent = tokenText;
         }
 
         function appendToken(modelId, content) {
+            modelState[modelId].content += content;
+            renderOutput(modelId);
+
+            const outputBox = getOutputBox(modelId);
+            if (outputBox) {
+                outputBox.classList.add('streaming');
+            }
+        }
+
+        function addToolCall(modelId, toolName, toolInput) {
+            // Track tool call in state with full details
+            if (!modelState[modelId].tools) {
+                modelState[modelId].tools = {};
+            }
+
+            // Do NOT clear content - preserve tool announcement text
+            // The user wants concatenation without losing text
+
+            const toolId = `${toolName}-${Date.now()}`;
+            modelState[modelId].tools[toolId] = {
+                name: toolName,
+                active: true,
+                input: toolInput,
+                output: null
+            };
+
+            // Re-render to show tool with input
+            renderOutput(modelId);
+            return toolId;
+        }
+
+        function completeToolCall(modelId, toolName, toolResult) {
+            // Mark tool as completed and add output
+            if (!modelState[modelId].tools) return;
+
+            // Find and update the most recent active tool with this name
+            const toolKeys = Object.keys(modelState[modelId].tools);
+            for (let i = toolKeys.length - 1; i >= 0; i--) {
+                const toolId = toolKeys[i];
+                const tool = modelState[modelId].tools[toolId];
+                if (tool.active && tool.name === toolName) {
+                    tool.active = false;
+                    tool.completed = true;
+                    tool.output = toolResult;
+                    break;
+                }
+            }
+
+            // Re-render to show tool output
+            renderOutput(modelId);
+        }
+
+        function renderOutput(modelId) {
             const outputBox = getOutputBox(modelId);
             if (!outputBox) return;
 
-            modelState[modelId].content += content;
-            outputBox.textContent = modelState[modelId].content;
-            outputBox.classList.remove('empty');
-            outputBox.classList.add('streaming');
-            outputBox.scrollTop = outputBox.scrollHeight;
-        }
+            const state = modelState[modelId];
+            let html = '';
 
-        function addToolBadge(modelId, toolName, active = false) {
-            const timeline = getToolTimeline(modelId);
-            if (!timeline) return;
+            // Render tool calls with collapsible details
+            if (state.tools) {
+                Object.entries(state.tools).forEach(([toolId, tool]) => {
+                    const statusClass = tool.active ? 'active' : 'completed';
+                    const uniqueId = `tool-${modelId}-${toolId}`;
+                    html += '<div class="tool-call">';
+                    html += `<div class="tool-call-header ${statusClass}" onclick="toggleToolDetails('${uniqueId}')" style="cursor: pointer;">`;
+                    html += `<span class="collapse-icon" id="icon-${uniqueId}">▼</span> ${tool.name}`;
+                    html += '</div>';
 
-            let badge = timeline.querySelector(`[data-tool="${toolName}"]`);
+                    // Collapsible content
+                    html += `<div id="${uniqueId}" class="tool-details" style="display: none;">`;
 
-            if (!badge) {
-                badge = document.createElement('div');
-                badge.className = 'tool-badge';
-                badge.dataset.tool = toolName;
+                    // Show input
+                    if (tool.input) {
+                        html += '<div class="tool-call-section">';
+                        html += '<div class="tool-call-label">Input:</div>';
+                        html += `<div class="tool-call-content">${JSON.stringify(tool.input, null, 2)}</div>`;
+                        html += '</div>';
+                    }
 
-                const spinner = document.createElement('span');
-                spinner.className = 'tool-spinner';
+                    // Show output (only when completed)
+                    if (tool.output) {
+                        html += '<div class="tool-call-section">';
+                        html += '<div class="tool-call-label">Output:</div>';
+                        html += `<div class="tool-call-content">${JSON.stringify(tool.output, null, 2)}</div>`;
+                        html += '</div>';
+                    }
 
-                const text = document.createElement('span');
-                text.textContent = toolName;
-
-                badge.appendChild(spinner);
-                badge.appendChild(text);
-                timeline.appendChild(badge);
-
-                modelState[modelId].tools[toolName] = badge;
+                    html += '</div>'; // End collapsible content
+                    html += '</div>';
+                });
             }
 
-            badge.classList.toggle('active', active);
-            badge.classList.toggle('completed', !active);
+            // Render markdown content
+            if (state.content) {
+                html += renderMarkdown(state.content);
+            }
+
+            // Render citations at the end (collapsible)
+            if (state.citations && state.citations.length > 0) {
+                const citationId = `citations-${modelId}-${Date.now()}`;
+                html += '<hr style="margin: 12px 0; border: 0; border-top: 1px solid #e2e8f0;">';
+                html += `<div style="margin-top: 12px; cursor: pointer;" onclick="toggleCitations('${citationId}')">`;
+                html += `<strong><span id="icon-${citationId}" style="font-size: 11px; margin-right: 6px;">▼</span>References (${state.citations.length})</strong>`;
+                html += '</div>';
+                html += `<ol id="${citationId}" style="display: none; margin: 6px 0 0 20px; font-size: 10px;">`;
+                state.citations.forEach(citation => {
+                    html += `<li style="margin-bottom: 4px;">${citation.citation || citation.english || 'Unknown'}</li>`;
+                });
+                html += '</ol>';
+            }
+
+            outputBox.innerHTML = html || 'Waiting for input...';
+            if (html) {
+                outputBox.classList.remove('empty');
+            }
+
+            outputBox.scrollTop = outputBox.scrollHeight;
         }
 
         function showError(modelId, errorMsg) {
@@ -491,7 +684,6 @@
         function clearAllOutputs() {
             modelIds.forEach(id => {
                 const outputBox = getOutputBox(id);
-                const timeline = getToolTimeline(id);
 
                 if (outputBox) {
                     outputBox.textContent = 'Waiting for input...';
@@ -499,13 +691,16 @@
                     outputBox.classList.remove('streaming');
                 }
 
-                if (timeline) {
-                    timeline.innerHTML = '';
-                }
-
                 modelState[id].content = '';
                 modelState[id].tools = {};
-                modelState[id].metrics = { ttft: null, total: null, tokens_in: null, tokens_out: null };
+                modelState[id].metrics = {
+                    ttft: null,
+                    total: null,
+                    tokens_in: null,
+                    tokens_out: null,
+                    tool_calls: null,
+                    cost: null
+                };
                 updateMetrics(id);
             });
         }
@@ -585,17 +780,24 @@
                     break;
 
                 case 'tool_start':
-                    addToolBadge(model_id, event.tool_name, true);
+                    addToolCall(model_id, event.tool_name, event.tool_input);
                     break;
 
                 case 'tool_end':
-                    addToolBadge(model_id, event.tool_name, false);
+                    completeToolCall(model_id, event.tool_name, event.tool_result);
+                    break;
+
+                case 'citations':
+                    modelState[model_id].citations = event.citations;
+                    renderOutput(model_id);
                     break;
 
                 case 'done':
                     modelState[model_id].metrics.total = event.total_ms;
                     modelState[model_id].metrics.tokens_in = event.tokens_in;
                     modelState[model_id].metrics.tokens_out = event.tokens_out;
+                    modelState[model_id].metrics.tool_calls = event.tool_calls;
+                    modelState[model_id].metrics.cost = event.cost;
                     updateMetrics(model_id);
 
                     const outputBox = getOutputBox(model_id);

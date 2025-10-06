@@ -14,6 +14,7 @@ class Config:
 
     # API Keys
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
     KALIMAT_API_KEY = os.getenv("KALIMAT_API_KEY")
 
     # Logging

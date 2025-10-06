@@ -3,6 +3,7 @@
 from langgraph.graph import StateGraph, END
 from ansari_langgraph.state import AnsariState
 from ansari_langgraph.nodes import create_agent_node, tool_node, finalize_node
+from ansari_langgraph.client_provider import get_llm_with_tools
 
 
 def route_after_agent(state: AnsariState) -> str:
@@ -19,13 +20,16 @@ def create_graph(model: str = "claude-sonnet-4-20250514"):
     """Create the Ansari agent graph.
 
     Args:
-        model: Anthropic model name to use
+        model: Anthropic or Gemini model name to use
     """
     # Create graph
     graph = StateGraph(AnsariState)
 
-    # Create agent node with specified model
-    agent_node = create_agent_node(model=model)
+    # Get singleton LLM client with tools
+    llm_with_tools = get_llm_with_tools(model)
+
+    # Create agent node with the client
+    agent_node = create_agent_node(llm_with_tools=llm_with_tools)
 
     # Add nodes
     graph.add_node("agent_node", agent_node)
