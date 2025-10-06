@@ -56,6 +56,13 @@ app = FastAPI(
 app.include_router(router)
 
 
+@app.get("/")
+async def index():
+    """Serve the main HTML interface."""
+    index_html_path = Path(__file__).parent / "index.html"
+    return FileResponse(index_html_path)
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""

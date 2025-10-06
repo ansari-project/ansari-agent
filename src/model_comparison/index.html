@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Model Comparison</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #2d3748;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #1a202c;
+            font-size: 28px;
+        }
+
+        /* Input Section */
+        .input-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        #query-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 15px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        #query-input:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        #send-btn {
+            background: #4299e1;
+            color: white;
+        }
+
+        #send-btn:hover:not(:disabled) {
+            background: #3182ce;
+        }
+
+        #send-btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+        #stop-btn {
+            background: #fc8181;
+            color: white;
+            display: none;
+        }
+
+        #stop-btn:hover {
+            background: #f56565;
+        }
+
+        #clear-btn {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        #clear-btn:hover {
+            background: #cbd5e0;
+        }
+
+        /* Model Grid */
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .model-panel {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .model-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+        }
+
+        .model-panel[data-model-id="gemini-2.5-pro"] .model-header {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .model-panel[data-model-id="gemini-2.5-flash"] .model-header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .model-panel[data-model-id="claude-opus-4-20250514"] .model-header {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+
+        .model-panel[data-model-id="claude-sonnet-4-5-20250929"] .model-header {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+
+        .model-name {
+            font-size: 18px;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .metrics {
+            display: flex;
+            gap: 16px;
+            font-size: 13px;
+            opacity: 0.95;
+        }
+
+        .metrics span {
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+
+        /* Tool Timeline */
+        .tool-timeline {
+            padding: 12px 20px;
+            background: #f7fafc;
+            border-bottom: 1px solid #e2e8f0;
+            min-height: 40px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .tool-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background: #edf2f7;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .tool-badge.active {
+            background: #bee3f8;
+            color: #2c5282;
+            animation: pulse 1.5s infinite;
+        }
+
+        .tool-badge.completed {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .tool-spinner {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Output Box */
+        .output-box {
+            padding: 20px;
+            min-height: 300px;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.6;
+            flex: 1;
+        }
+
+        .output-box.empty {
+            color: #a0aec0;
+            font-style: italic;
+        }
+
+        .output-box.streaming::after {
+            content: '▊';
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .error-message {
+            color: #e53e3e;
+            background: #fff5f5;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #fc8181;
+            margin-top: 10px;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: white;
+            border-radius: 8px;
+            padding: 12px 20px;
+            margin-top: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .status-bar.active {
+            background: #ebf8ff;
+            color: #2c5282;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .models-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .models-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .button-group {
+                flex-direction: row;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 LLM Model Comparison</h1>
+
+        <!-- Input Section -->
+        <div class="input-section">
+            <div class="input-group">
+                <textarea
+                    id="query-input"
+                    placeholder="Enter your question here..."
+                    rows="3"
+                ></textarea>
+                <div class="button-group">
+                    <button id="send-btn">Send</button>
+                    <button id="stop-btn">Stop</button>
+                    <button id="clear-btn">Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Models Grid -->
+        <div class="models-grid">
+            <!-- Gemini 2.5 Pro -->
+            <div class="model-panel" data-model-id="gemini-2.5-pro">
+                <div class="model-header">
+                    <span class="model-name">Gemini 2.5 Pro</span>
+                    <div class="metrics">
+                        <span class="ttft">TTFT: -</span>
+                        <span class="total">Total: -</span>
+                        <span class="tokens">In/Out: -/-</span>
+                    </div>
+                </div>
+                <div class="tool-timeline"></div>
+                <div class="output-box empty">Waiting for input...</div>
+            </div>
+
+            <!-- Gemini 2.5 Flash -->
+            <div class="model-panel" data-model-id="gemini-2.5-flash">
+                <div class="model-header">
+                    <span class="model-name">Gemini 2.5 Flash</span>
+                    <div class="metrics">
+                        <span class="ttft">TTFT: -</span>
+                        <span class="total">Total: -</span>
+                        <span class="tokens">In/Out: -/-</span>
+                    </div>
+                </div>
+                <div class="tool-timeline"></div>
+                <div class="output-box empty">Waiting for input...</div>
+            </div>
+
+            <!-- Claude Opus 4.1 -->
+            <div class="model-panel" data-model-id="claude-opus-4-20250514">
+                <div class="model-header">
+                    <span class="model-name">Claude Opus 4.1</span>
+                    <div class="metrics">
+                        <span class="ttft">TTFT: -</span>
+                        <span class="total">Total: -</span>
+                        <span class="tokens">In/Out: -/-</span>
+                    </div>
+                </div>
+                <div class="tool-timeline"></div>
+                <div class="output-box empty">Waiting for input...</div>
+            </div>
+
+            <!-- Claude Sonnet 4.5 -->
+            <div class="model-panel" data-model-id="claude-sonnet-4-5-20250929">
+                <div class="model-header">
+                    <span class="model-name">Claude Sonnet 4.5</span>
+                    <div class="metrics">
+                        <span class="ttft">TTFT: -</span>
+                        <span class="total">Total: -</span>
+                        <span class="tokens">In/Out: -/-</span>
+                    </div>
+                </div>
+                <div class="tool-timeline"></div>
+                <div class="output-box empty">Waiting for input...</div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar" id="status">Ready</div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const queryInput = document.getElementById('query-input');
+        const sendBtn = document.getElementById('send-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const status = document.getElementById('status');
+
+        // State
+        let currentSessionId = null;
+        let eventSource = null;
+        const modelState = {};
+
+        // Initialize model state
+        const modelIds = [
+            'gemini-2.5-pro',
+            'gemini-2.5-flash',
+            'claude-opus-4-20250514',
+            'claude-sonnet-4-5-20250929'
+        ];
+
+        modelIds.forEach(id => {
+            modelState[id] = {
+                content: '',
+                tools: {},
+                metrics: { ttft: null, total: null, tokens_in: null, tokens_out: null }
+            };
+        });
+
+        // Utility Functions
+        function updateStatus(message, active = false) {
+            status.textContent = message;
+            status.classList.toggle('active', active);
+        }
+
+        function getPanel(modelId) {
+            return document.querySelector(`.model-panel[data-model-id="${modelId}"]`);
+        }
+
+        function getOutputBox(modelId) {
+            const panel = getPanel(modelId);
+            return panel?.querySelector('.output-box');
+        }
+
+        function getToolTimeline(modelId) {
+            const panel = getPanel(modelId);
+            return panel?.querySelector('.tool-timeline');
+        }
+
+        function updateMetrics(modelId) {
+            const panel = getPanel(modelId);
+            if (!panel) return;
+
+            const state = modelState[modelId];
+            const metrics = state.metrics;
+
+            const ttftEl = panel.querySelector('.ttft');
+            const totalEl = panel.querySelector('.total');
+            const tokensEl = panel.querySelector('.tokens');
+
+            ttftEl.textContent = `TTFT: ${metrics.ttft !== null ? metrics.ttft.toFixed(0) + 'ms' : '-'}`;
+            totalEl.textContent = `Total: ${metrics.total !== null ? metrics.total.toFixed(0) + 'ms' : '-'}`;
+            tokensEl.textContent = `In/Out: ${metrics.tokens_in || '-'}/${metrics.tokens_out || '-'}`;
+        }
+
+        function appendToken(modelId, content) {
+            const outputBox = getOutputBox(modelId);
+            if (!outputBox) return;
+
+            modelState[modelId].content += content;
+            outputBox.textContent = modelState[modelId].content;
+            outputBox.classList.remove('empty');
+            outputBox.classList.add('streaming');
+            outputBox.scrollTop = outputBox.scrollHeight;
+        }
+
+        function addToolBadge(modelId, toolName, active = false) {
+            const timeline = getToolTimeline(modelId);
+            if (!timeline) return;
+
+            let badge = timeline.querySelector(`[data-tool="${toolName}"]`);
+
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'tool-badge';
+                badge.dataset.tool = toolName;
+
+                const spinner = document.createElement('span');
+                spinner.className = 'tool-spinner';
+
+                const text = document.createElement('span');
+                text.textContent = toolName;
+
+                badge.appendChild(spinner);
+                badge.appendChild(text);
+                timeline.appendChild(badge);
+
+                modelState[modelId].tools[toolName] = badge;
+            }
+
+            badge.classList.toggle('active', active);
+            badge.classList.toggle('completed', !active);
+        }
+
+        function showError(modelId, errorMsg) {
+            const outputBox = getOutputBox(modelId);
+            if (!outputBox) return;
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = `Error: ${errorMsg}`;
+            outputBox.appendChild(errorDiv);
+            outputBox.classList.remove('streaming');
+        }
+
+        function clearAllOutputs() {
+            modelIds.forEach(id => {
+                const outputBox = getOutputBox(id);
+                const timeline = getToolTimeline(id);
+
+                if (outputBox) {
+                    outputBox.textContent = 'Waiting for input...';
+                    outputBox.classList.add('empty');
+                    outputBox.classList.remove('streaming');
+                }
+
+                if (timeline) {
+                    timeline.innerHTML = '';
+                }
+
+                modelState[id].content = '';
+                modelState[id].tools = {};
+                modelState[id].metrics = { ttft: null, total: null, tokens_in: null, tokens_out: null };
+                updateMetrics(id);
+            });
+        }
+
+        // API Functions
+        async function submitQuery() {
+            const query = queryInput.value.trim();
+            if (!query) {
+                alert('Please enter a question');
+                return;
+            }
+
+            // Reset state
+            clearAllOutputs();
+            updateStatus('Submitting query...', true);
+            sendBtn.disabled = true;
+            stopBtn.style.display = 'inline-block';
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: query })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to submit query: ${response.status}`);
+                }
+
+                const data = await response.json();
+                currentSessionId = data.session_id;
+
+                updateStatus('Streaming responses...', true);
+                streamResponses(currentSessionId);
+
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, false);
+                sendBtn.disabled = false;
+                stopBtn.style.display = 'none';
+            }
+        }
+
+        function streamResponses(sessionId) {
+            eventSource = new EventSource(`/api/stream/${sessionId}`);
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleSSEEvent(data);
+                } catch (error) {
+                    console.error('Failed to parse SSE event:', error);
+                }
+            };
+
+            eventSource.onerror = () => {
+                console.log('SSE connection closed');
+                eventSource.close();
+                finishStreaming();
+            };
+        }
+
+        function handleSSEEvent(event) {
+            const { type, model_id } = event;
+
+            switch (type) {
+                case 'start':
+                    console.log(`[${model_id}] Stream started`);
+                    break;
+
+                case 'ttft':
+                    modelState[model_id].metrics.ttft = event.ttft_ms;
+                    updateMetrics(model_id);
+                    break;
+
+                case 'token':
+                    appendToken(model_id, event.content);
+                    break;
+
+                case 'tool_start':
+                    addToolBadge(model_id, event.tool_name, true);
+                    break;
+
+                case 'tool_end':
+                    addToolBadge(model_id, event.tool_name, false);
+                    break;
+
+                case 'done':
+                    modelState[model_id].metrics.total = event.total_ms;
+                    modelState[model_id].metrics.tokens_in = event.tokens_in;
+                    modelState[model_id].metrics.tokens_out = event.tokens_out;
+                    updateMetrics(model_id);
+
+                    const outputBox = getOutputBox(model_id);
+                    if (outputBox) {
+                        outputBox.classList.remove('streaming');
+                    }
+                    break;
+
+                case 'error':
+                    showError(model_id, event.error);
+                    break;
+
+                case 'heartbeat':
+                    // Just keep connection alive
+                    break;
+
+                default:
+                    console.warn('Unknown event type:', type);
+            }
+        }
+
+        function stopStreaming() {
+            if (!currentSessionId) return;
+
+            fetch(`/api/cancel/${currentSessionId}`, {
+                method: 'POST'
+            }).catch(err => console.error('Cancel failed:', err));
+
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            finishStreaming();
+        }
+
+        function finishStreaming() {
+            sendBtn.disabled = false;
+            stopBtn.style.display = 'none';
+            updateStatus('Ready', false);
+
+            // Remove streaming indicators
+            document.querySelectorAll('.output-box').forEach(box => {
+                box.classList.remove('streaming');
+            });
+        }
+
+        // Event Listeners
+        sendBtn.addEventListener('click', submitQuery);
+        stopBtn.addEventListener('click', stopStreaming);
+        clearBtn.addEventListener('click', () => {
+            queryInput.value = '';
+            clearAllOutputs();
+            updateStatus('Ready', false);
+        });
+
+        queryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                submitQuery();
+            }
+        });
+
+        // Initial state
+        updateStatus('Ready', false);
+    </script>
+</body>
+</html>
