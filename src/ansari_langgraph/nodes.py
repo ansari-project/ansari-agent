@@ -9,20 +9,6 @@ from ansari_langgraph.tools import search_quran
 logger = setup_logger(__name__)
 
 
-# Initialize ChatAnthropic (enables token streaming in LangGraph)
-llm = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
-    api_key=config.ANTHROPIC_API_KEY,
-    default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-    max_tokens=1024,
-    temperature=0,
-    streaming=True,  # Enable streaming
-)
-
-# Bind tools to the LLM
-llm_with_tools = llm.bind_tools([search_quran])
-
-
 # System message
 SYSTEM_MESSAGE = """You are Ansari, an Islamic knowledge assistant.
 
@@ -33,66 +19,109 @@ When answering questions about Islam, the Quran, or Islamic teachings:
 - Cite your sources using the ayah references"""
 
 
-async def agent_node(state: AnsariState) -> AnsariState:
-    """Agent node - calls LLM with tools using LangChain."""
-    logger.debug("→ Agent node executing...")
+def create_agent_node(model: str = "claude-sonnet-4-20250514"):
+    """Create an agent node with the specified Anthropic model.
 
-    messages = state.get("messages", [])
+    Args:
+        model: Anthropic model name
 
-    # Convert Anthropic message format to LangChain format
-    lc_messages = [SystemMessage(content=SYSTEM_MESSAGE)]
+    Returns:
+        Agent node function
+    """
+    # Initialize ChatAnthropic with specified model
+    llm = ChatAnthropic(
+        model=model,
+        api_key=config.ANTHROPIC_API_KEY,
+        default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+        max_tokens=1024,
+        temperature=0,
+        streaming=True,
+    )
 
-    for msg in messages:
-        if msg["role"] == "user":
-            lc_messages.append(HumanMessage(content=msg["content"]))
-        elif msg["role"] == "assistant":
-            lc_messages.append(AIMessage(content=msg["content"]))
+    # Bind tools to the LLM
+    llm_with_tools = llm.bind_tools([search_quran])
 
-    # Call LLM with tools
-    response = await llm_with_tools.ainvoke(lc_messages)
+    async def agent_node(state: AnsariState) -> AnsariState:
+        """Agent node - calls LLM with tools using LangChain."""
+        logger.debug("→ Agent node executing...")
 
-    # Check if there are tool calls
-    if response.tool_calls:
-        logger.debug(f"LLM requested {len(response.tool_calls)} tool calls")
+        messages = state.get("messages", [])
 
-        tool_calls = []
-        for tool_call in response.tool_calls:
-            tool_calls.append({
-                "id": tool_call["id"],
-                "name": tool_call["name"],
-                "input": tool_call["args"],
+        # Convert Anthropic message format to LangChain format
+        lc_messages = [SystemMessage(content=SYSTEM_MESSAGE)]
+
+        for msg in messages:
+            if msg["role"] == "user":
+                lc_messages.append(HumanMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                lc_messages.append(AIMessage(content=msg["content"]))
+
+        # Call LLM with tools
+        response = await llm_with_tools.ainvoke(lc_messages)
+
+        # Track token usage
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = state.get("input_tokens", 0)
+            output_tokens = state.get("output_tokens", 0)
+
+            input_tokens += response.usage_metadata.get("input_tokens", 0)
+            output_tokens += response.usage_metadata.get("output_tokens", 0)
+
+            state["input_tokens"] = input_tokens
+            state["output_tokens"] = output_tokens
+
+        # Check if there are tool calls
+        if response.tool_calls:
+            logger.debug(f"LLM requested {len(response.tool_calls)} tool calls")
+
+            tool_calls = []
+            for tool_call in response.tool_calls:
+                tool_calls.append({
+                    "id": tool_call["id"],
+                    "name": tool_call["name"],
+                    "input": tool_call["args"],
+                })
+                logger.info(f"Tool call: {tool_call['name']} with input: {tool_call['args']}")
+
+            state["tool_calls"] = tool_calls
+            state["stop_reason"] = "tool_use"
+
+            # Add assistant message with tool_use to history (in Anthropic format)
+            # LangChain's response.content may be empty when there are tool calls
+            messages.append({
+                "role": "assistant",
+                "content": response.content or "",
             })
-            logger.info(f"Tool call: {tool_call['name']} with input: {tool_call['args']}")
+            state["messages"] = messages
 
-        state["tool_calls"] = tool_calls
-        state["stop_reason"] = "tool_use"
+        else:
+            # No tool calls - this is the final response
+            logger.debug("LLM returned final response")
 
-        # Add assistant message with tool_use to history (in Anthropic format)
-        # LangChain's response.content may be empty when there are tool calls
-        messages.append({
-            "role": "assistant",
-            "content": response.content or "",
-        })
-        state["messages"] = messages
+            # Handle both string and list content formats
+            final_text = response.content
+            if isinstance(final_text, list):
+                # Extract text from content blocks
+                final_text = "".join(
+                    block.get("text", "") if isinstance(block, dict) else str(block)
+                    for block in final_text
+                )
 
-    else:
-        # No tool calls - this is the final response
-        logger.debug("LLM returned final response")
+            state["final_response"] = final_text
+            state["stop_reason"] = "end_turn"
 
-        final_text = response.content
-        state["final_response"] = final_text
-        state["stop_reason"] = "end_turn"
+            # Add assistant message to history
+            messages.append({
+                "role": "assistant",
+                "content": final_text,
+            })
+            state["messages"] = messages
 
-        # Add assistant message to history
-        messages.append({
-            "role": "assistant",
-            "content": final_text,
-        })
-        state["messages"] = messages
+            logger.debug(f"Final response length: {len(final_text)}")
 
-        logger.debug(f"Final response length: {len(final_text)}")
+        return state
 
-    return state
+    return agent_node
 
 
 async def tool_node(state: AnsariState) -> AnsariState:

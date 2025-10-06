@@ -22,3 +22,7 @@ class AnsariState(TypedDict, total=False):
 
     # Execution metadata
     stop_reason: str | None  # Anthropic stop_reason (tool_use, end_turn, etc.)
+
+    # Token usage tracking
+    input_tokens: int  # Total input tokens used
+    output_tokens: int  # Total output tokens generated

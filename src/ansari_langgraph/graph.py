@@ -2,7 +2,7 @@
 
 from langgraph.graph import StateGraph, END
 from ansari_langgraph.state import AnsariState
-from ansari_langgraph.nodes import agent_node, tool_node, finalize_node
+from ansari_langgraph.nodes import create_agent_node, tool_node, finalize_node
 
 
 def route_after_agent(state: AnsariState) -> str:
@@ -15,10 +15,17 @@ def route_after_agent(state: AnsariState) -> str:
         return "finalize_node"
 
 
-def create_graph():
-    """Create the Ansari agent graph."""
+def create_graph(model: str = "claude-sonnet-4-20250514"):
+    """Create the Ansari agent graph.
+
+    Args:
+        model: Anthropic model name to use
+    """
     # Create graph
     graph = StateGraph(AnsariState)
+
+    # Create agent node with specified model
+    agent_node = create_agent_node(model=model)
 
     # Add nodes
     graph.add_node("agent_node", agent_node)

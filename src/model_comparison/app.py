@@ -1,12 +1,14 @@
 """FastAPI application for model comparison."""
 
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from .config import config
 from .session import session_manager
 from .auth import verify_credentials
+from .endpoints import router
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +52,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Include API router
+app.include_router(router)
+
 
 @app.get("/health")
 async def health_check():
@@ -87,6 +92,13 @@ async def debug_memory(username: str = Depends(verify_credentials)):
             content={"error": "psutil not installed"},
             status_code=500,
         )
+
+
+@app.get("/debug")
+async def debug_ui(username: str = Depends(verify_credentials)):
+    """Serve debug HTML interface (requires auth)."""
+    debug_html_path = Path(__file__).parent / "debug.html"
+    return FileResponse(debug_html_path)
 
 
 if __name__ == "__main__":

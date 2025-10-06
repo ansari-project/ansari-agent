@@ -10,10 +10,15 @@ logger = setup_logger(__name__)
 class AnsariLangGraph:
     """Ansari Agent using LangGraph for orchestration."""
 
-    def __init__(self):
-        """Initialize the Ansari LangGraph agent."""
-        self.graph = create_graph()
-        logger.info("AnsariLangGraph initialized")
+    def __init__(self, model: str = "claude-sonnet-4-20250514"):
+        """Initialize the Ansari LangGraph agent.
+
+        Args:
+            model: Anthropic model name (claude-sonnet-4-20250514, claude-opus-4-20250514, etc.)
+        """
+        self.model = model
+        self.graph = create_graph(model=model)
+        logger.info(f"AnsariLangGraph initialized with {model}")
 
     async def query(self, message: str) -> str:
         """Send a query to the agent and get complete response.
@@ -43,6 +48,43 @@ class AnsariLangGraph:
         )
 
         return final_response
+
+    async def query_with_citations(self, message: str) -> dict:
+        """Send a query and get response with citations.
+
+        Args:
+            message: User's question
+
+        Returns:
+            Dict with 'response', 'citations', 'input_tokens', and 'output_tokens' keys
+        """
+        logger.info(f'User query: "{message}"')
+
+        # Create initial state
+        initial_state: AnsariState = {
+            "messages": [{"role": "user", "content": message}],
+        }
+
+        # Run the graph
+        result = await self.graph.ainvoke(initial_state)
+
+        # Extract response and citations
+        final_response = result.get("final_response", "")
+        citations = result.get("citations", [])
+        input_tokens = result.get("input_tokens", 0)
+        output_tokens = result.get("output_tokens", 0)
+
+        logger.info(
+            f"Query complete: {len(final_response)} chars, {len(citations)} citations, "
+            f"{input_tokens} input tokens, {output_tokens} output tokens"
+        )
+
+        return {
+            "response": final_response,
+            "citations": citations,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        }
 
     async def stream_query(self, message: str):
         """Send a query and stream the response token-by-token.

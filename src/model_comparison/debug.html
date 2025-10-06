@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Comparison - Debug</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+        #input-section {
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            font-family: monospace;
+            padding: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #output {
+            background: #f5f5f5;
+            padding: 15px;
+            border: 1px solid #ccc;
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+        .info {
+            color: blue;
+        }
+        #status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Model Comparison - Debug SSE Stream</h1>
+
+    <div id="input-section">
+        <textarea id="query-input" placeholder="Enter your question here..."></textarea>
+        <br><br>
+        <button id="submit-btn">Submit Query</button>
+        <button id="clear-btn">Clear Output</button>
+    </div>
+
+    <div id="status">Status: Ready</div>
+
+    <div id="output"></div>
+
+    <script>
+        const outputEl = document.getElementById('output');
+        const statusEl = document.getElementById('status');
+        const submitBtn = document.getElementById('submit-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const queryInput = document.getElementById('query-input');
+
+        let eventSource = null;
+
+        function log(message, className = '') {
+            const timestamp = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.className = className;
+            line.textContent = `[${timestamp}] ${message}`;
+            outputEl.appendChild(line);
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+
+        function updateStatus(message, className = '') {
+            statusEl.textContent = `Status: ${message}`;
+            statusEl.className = className;
+        }
+
+        async function submitQuery() {
+            const query = queryInput.value.trim();
+            if (!query) {
+                alert('Please enter a question');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            outputEl.innerHTML = '';
+            log(`Submitting query: ${query}`, 'info');
+            updateStatus('Submitting query...');
+
+            try {
+                // Step 1: Submit query to get session ID
+                const queryResponse = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Note: Browser will handle Basic Auth via prompt
+                    },
+                    body: JSON.stringify({ message: query }),
+                });
+
+                if (!queryResponse.ok) {
+                    throw new Error(`Query failed: ${queryResponse.status} ${queryResponse.statusText}`);
+                }
+
+                const { session_id } = await queryResponse.json();
+                log(`✓ Session created: ${session_id}`, 'success');
+                updateStatus(`Streaming from session ${session_id}...`);
+
+                // Step 2: Open SSE stream
+                eventSource = new EventSource(`/api/stream/${session_id}`);
+
+                eventSource.onopen = () => {
+                    log('✓ SSE connection opened', 'success');
+                };
+
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        const eventType = data.type;
+                        const modelId = data.model_id || 'N/A';
+
+                        switch (eventType) {
+                            case 'start':
+                                log(`[${modelId}] Stream started`);
+                                break;
+                            case 'ttft':
+                                log(`[${modelId}] TTFT: ${data.ttft_ms.toFixed(0)}ms`, 'info');
+                                break;
+                            case 'token':
+                                log(`[${modelId}] Token: ${JSON.stringify(data.content)}`);
+                                break;
+                            case 'tool_start':
+                                log(`[${modelId}] Tool started: ${data.tool_name}`, 'info');
+                                break;
+                            case 'tool_end':
+                                log(`[${modelId}] Tool ended: ${data.tool_name} (${data.duration_ms.toFixed(0)}ms)`, 'info');
+                                break;
+                            case 'done':
+                                log(`[${modelId}] Done: ${data.total_ms.toFixed(0)}ms, tokens_in=${data.tokens_in}, tokens_out=${data.tokens_out}`, 'success');
+                                break;
+                            case 'error':
+                                log(`[${modelId}] Error: ${data.error}`, 'error');
+                                break;
+                            case 'heartbeat':
+                                log('♥ Heartbeat', 'info');
+                                break;
+                            default:
+                                log(`Unknown event type: ${eventType}`);
+                        }
+                    } catch (e) {
+                        log(`Failed to parse event: ${e.message}`, 'error');
+                    }
+                };
+
+                eventSource.onerror = (error) => {
+                    log('✗ SSE connection error or closed', 'error');
+                    eventSource.close();
+                    submitBtn.disabled = false;
+                    updateStatus('Stream ended or error occurred');
+                };
+
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+                submitBtn.disabled = false;
+                updateStatus('Error');
+            }
+        }
+
+        clearBtn.addEventListener('click', () => {
+            outputEl.innerHTML = '';
+            updateStatus('Output cleared');
+        });
+
+        submitBtn.addEventListener('click', submitQuery);
+
+        queryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                submitQuery();
+            }
+        });
+
+        // Test connection on load
+        log('Debug interface loaded. Press Submit to test SSE streaming.', 'info');
+    </script>
+</body>
+</html>
