@@ -49,9 +49,21 @@ class Config:
             raise RuntimeError("GOOGLE_API_KEY environment variable is required")
         return key
 
-    # Auth (hardcoded for Phase 1, env vars in Phase 4)
-    AUTH_USERNAME = "admin"
-    AUTH_PASSWORD = "test123"  # Will be from env in Phase 4
+    # Auth (optional - disable by not setting AUTH_PASSWORD)
+    @property
+    def auth_username(self) -> str:
+        """Get auth username from environment (default: admin)."""
+        return os.getenv("MODEL_COMPARISON_AUTH_USERNAME", "admin")
+
+    @property
+    def auth_password(self) -> str | None:
+        """Get auth password from environment (None = auth disabled)."""
+        return os.getenv("MODEL_COMPARISON_AUTH_PASSWORD")
+
+    @property
+    def auth_enabled(self) -> bool:
+        """Check if authentication is enabled."""
+        return self.auth_password is not None and len(self.auth_password) > 0
 
     def validate(self) -> None:
         """Validate configuration at startup."""
