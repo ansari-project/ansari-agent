@@ -1,7 +1,13 @@
 """Configuration and environment variable management."""
 
 import os
+from pathlib import Path
 from typing import Dict
+from dotenv import load_dotenv
+
+# Load .env file from project root
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(env_path)
 
 
 class Config:
