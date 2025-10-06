@@ -1,12 +1,13 @@
 # Nixpacks configuration for Railway deployment with uv
 
 [phases.setup]
-nixPkgs = ["python311", "gcc"]
+nixPkgs = ["python311"]
 
 [phases.install]
 cmds = [
+    "python -m pip install --upgrade pip",
     "pip install uv",
-    "uv pip install --system -e ."
+    "uv pip install --system --no-cache -e ."
 ]
 
 [start]
