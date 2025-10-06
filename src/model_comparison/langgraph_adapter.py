@@ -40,8 +40,8 @@ async def stream_model(
 
     try:
         # Import here to avoid circular imports
-        from ansari_langgraph.graph import create_agent_graph
-        from ansari_langgraph.state import AgentState
+        from ansari_langgraph.graph import create_graph
+        from ansari_langgraph.state import AnsariState
 
         logger.info(f"[session: {session_id}] [model: {model_id}] Starting stream")
 
@@ -49,7 +49,7 @@ async def stream_model(
         await event_queue.put(StartEvent(model_id=model_id))
 
         # Create agent graph for this model
-        graph = create_agent_graph(model=model_id)
+        graph = create_graph(model=model_id)
 
         # Convert messages to LangGraph format
         lg_messages = [
@@ -58,11 +58,15 @@ async def stream_model(
         ]
 
         # Initialize state
-        initial_state = AgentState(
+        initial_state = AnsariState(
             messages=lg_messages,
-            current_tool=None,
+            tool_calls=None,
             tool_results=[],
-            iteration_count=0,
+            citations=[],
+            final_response=None,
+            stop_reason=None,
+            input_tokens=0,
+            output_tokens=0,
         )
 
         # Track accumulated response
