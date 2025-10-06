@@ -1,6 +1,7 @@
 """Graph nodes for Ansari LangGraph implementation."""
 
 from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from ansari_agent.utils import config, setup_logger
 from ansari_langgraph.state import AnsariState
@@ -20,23 +21,36 @@ When answering questions about Islam, the Quran, or Islamic teachings:
 
 
 def create_agent_node(model: str = "claude-sonnet-4-20250514"):
-    """Create an agent node with the specified Anthropic model.
+    """Create an agent node with the specified model (Anthropic or Gemini).
 
     Args:
-        model: Anthropic model name
+        model: Model identifier (Anthropic or Gemini model name)
 
     Returns:
         Agent node function
     """
-    # Initialize ChatAnthropic with specified model
-    llm = ChatAnthropic(
-        model=model,
-        api_key=config.ANTHROPIC_API_KEY,
-        default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-        max_tokens=1024,
-        temperature=0,
-        streaming=True,
-    )
+    # Check if this is a Gemini model
+    is_gemini = model.startswith("gemini")
+
+    if is_gemini:
+        # Initialize ChatGoogleGenerativeAI
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            google_api_key=config.GOOGLE_API_KEY,
+            max_tokens=1024,
+            temperature=0,
+            streaming=True,
+        )
+    else:
+        # Initialize ChatAnthropic
+        llm = ChatAnthropic(
+            model=model,
+            api_key=config.ANTHROPIC_API_KEY,
+            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+            max_tokens=1024,
+            temperature=0,
+            streaming=True,
+        )
 
     # Bind tools to the LLM
     llm_with_tools = llm.bind_tools([search_quran])

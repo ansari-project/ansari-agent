@@ -126,7 +126,21 @@ async def stream_model(
                 if "messages" in event and event["messages"]:
                     last_message = event["messages"][-1]
                     if last_message.get("role") == "assistant":
-                        content = last_message.get("content", "")
+                        raw_content = last_message.get("content", "")
+
+                        # Extract text from content (may be string or list of blocks)
+                        if isinstance(raw_content, list):
+                            # Content is a list of blocks, extract text
+                            content = ""
+                            for block in raw_content:
+                                if isinstance(block, dict) and "text" in block:
+                                    content += block["text"]
+                                elif isinstance(block, str):
+                                    content += block
+                        else:
+                            # Content is already a string
+                            content = raw_content
+
                         if content and content != accumulated_content:
                             # Send only new content (delta)
                             delta = content[len(accumulated_content):]
