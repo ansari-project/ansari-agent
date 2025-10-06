@@ -1,0 +1,64 @@
+"""Configuration and environment variable management."""
+
+import os
+from typing import Dict
+
+
+class Config:
+    """Application configuration."""
+
+    # Model IDs
+    MODELS: Dict[str, str] = {
+        "gemini-2.5-pro": "Gemini 2.5 Pro",
+        "gemini-2.5-flash": "Gemini 2.5 Flash",
+        "claude-opus-4-20250514": "Claude Opus 4.1",
+        "claude-sonnet-4-5-20250929": "Claude Sonnet 4.5",
+    }
+
+    # Fairness configuration
+    TEMPERATURE = 0.0
+    MAX_TOKENS = 4096
+    SYSTEM_PROMPT: str | None = None
+
+    # Session management
+    SESSION_TTL_SECONDS = 900  # 15 minutes
+    MAX_SESSIONS = 50
+    MAX_HISTORY_TURNS = 10
+    MAX_HISTORY_TOKENS = 8000
+
+    # SSE configuration
+    HEARTBEAT_INTERVAL_SECONDS = 10
+    STREAM_TIMEOUT_SECONDS = 25
+
+    # API keys
+    @property
+    def anthropic_api_key(self) -> str:
+        """Get Anthropic API key from environment."""
+        key = os.getenv("ANTHROPIC_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY environment variable is required"
+            )
+        return key
+
+    @property
+    def google_api_key(self) -> str:
+        """Get Google API key from environment."""
+        key = os.getenv("GOOGLE_API_KEY")
+        if not key:
+            raise RuntimeError("GOOGLE_API_KEY environment variable is required")
+        return key
+
+    # Auth (hardcoded for Phase 1, env vars in Phase 4)
+    AUTH_USERNAME = "admin"
+    AUTH_PASSWORD = "test123"  # Will be from env in Phase 4
+
+    def validate(self) -> None:
+        """Validate configuration at startup."""
+        # Trigger property access to validate keys exist
+        _ = self.anthropic_api_key
+        _ = self.google_api_key
+
+
+# Global config instance
+config = Config()

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "ansari-agent"
 version = "0.1.0"
@@ -6,16 +10,32 @@ requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.69.0",
     "claude-agent-sdk==0.1.0",
+    "fastapi>=0.118.0",
+    "google-generativeai>=0.8.5",
     "httpx>=0.28.1",
     "langchain-anthropic>=0.3.21",
+    "langchain-google-genai>=2.0.10",
     "langgraph>=0.6.8",
+    "psutil>=7.1.0",
     "python-dotenv>=1.1.1",
+    "rich>=14.1.0",
+    "sse-starlette>=3.0.2",
+    "typer>=0.19.2",
+    "uvicorn>=0.37.0",
 ]
 
 [dependency-groups]
 dev = [
     "cloc>=0.2.5",
+    "httpx>=0.28.1",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "radon>=6.0.1",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ansari_agent", "src/ansari_langgraph", "src/ansari_gemini", "src/model_comparison"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
