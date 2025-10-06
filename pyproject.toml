@@ -1,0 +1,21 @@
+[project]
+name = "ansari-agent"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=0.69.0",
+    "claude-agent-sdk==0.1.0",
+    "httpx>=0.28.1",
+    "langchain-anthropic>=0.3.21",
+    "langgraph>=0.6.8",
+    "python-dotenv>=1.1.1",
+]
+
+[dependency-groups]
+dev = [
+    "cloc>=0.2.5",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "radon>=6.0.1",
+]
