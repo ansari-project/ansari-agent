@@ -1,8 +1,16 @@
 # Ansari-Agent Project Instructions for AI Agents
 
+## Current Status
+
+This project has evolved from an initial Claude SDK exploration into a **production-ready multi-model comparison interface** featuring:
+- LangGraph integration for Claude models (Opus, Sonnet)
+- Native Gemini integration (Pro, Flash)
+- Real-time streaming with Server-Sent Events
+- Railway deployment configuration
+
 ## Project Context
 
-This is an exploratory project to evaluate the Claude Agent SDK for the next version of Ansari. The goal is to prototype and assess whether the SDK can replace or complement the current agent implementation in [ansari-backend](../ansari-backend).
+Originally started as an exploratory project to evaluate the Claude Agent SDK, this has now become the primary implementation for Ansari's multi-model capabilities. The Claude SDK was evaluated and rejected (see `legacy/` directory), replaced with a superior LangGraph-based architecture.
 
 ## Codev Methodology
 

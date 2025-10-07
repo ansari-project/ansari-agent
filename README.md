@@ -1,171 +1,202 @@
-# Ansari Agent - Claude SDK Prototype
+# Ansari Agent - Multi-Model Islamic Knowledge Assistant
 
-Prototype implementation of Ansari using Claude Agent SDK for evaluation purposes.
+A high-performance model comparison interface for Islamic knowledge queries, supporting parallel execution of multiple LLMs with real-time streaming responses.
 
-## Status
+## Features
 
-✅ **Working Prototype** - Successfully demonstrates:
-- Claude Agent SDK integration
-- SearchQuran tool integration
-- Citation metadata preservation
-- Multi-turn conversations with session management
-- Concurrent user handling (one agent instance per user)
+- **Multi-Model Support**: Compare responses from Claude (Opus, Sonnet) and Gemini (Pro, Flash) models side-by-side
+- **Real-Time Streaming**: Token-by-token streaming for all models with SSE (Server-Sent Events)
+- **Tool Integration**: Integrated Quran search capabilities via Kalimat API
+- **Session Management**: Persistent conversation history with LRU eviction and TTL
+- **Performance Optimized**: 3-9x faster response times through caching and pre-compilation
+- **Secure**: HTTP Basic Auth protection with configurable credentials
+- **Production Ready**: Deployed on Railway with health checks and monitoring
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Frontend (SPA)                   │
+│            HTML + Vanilla JS + Marked.js            │
+└─────────────────────────┬───────────────────────────┘
+                          │ SSE
+┌─────────────────────────┴───────────────────────────┐
+│                  FastAPI Backend                     │
+│                 model_comparison/                    │
+├──────────────────────────────────────────────────────┤
+│  ┌────────────────┐        ┌────────────────┐       │
+│  │  LangGraph      │        │    Gemini      │       │
+│  │  Integration    │        │   Integration  │       │
+│  └────────┬────────┘        └────────┬───────┘       │
+│           │                           │               │
+│  ┌────────┴────────┐        ┌────────┴───────┐       │
+│  │ Claude Models   │        │ Gemini Models  │       │
+│  │ (Opus, Sonnet)  │        │ (Pro, Flash)   │       │
+│  └─────────────────┘        └────────────────┘       │
+└──────────────────────────────────────────────────────┘
+                          │
+                  ┌───────┴────────┐
+                  │  Kalimat API   │
+                  │ (Quran Search) │
+                  └────────────────┘
+```
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.13+
-- Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
-- API keys configured in `.env`
+- API keys for Anthropic, Google, and Kalimat
 
 ### Installation
 
 ```bash
-# Install dependencies
+# Clone the repository
+git clone https://github.com/yourusername/ansari-agent.git
+cd ansari-agent
+
+# Install dependencies with uv
 uv sync
 
 # Copy environment template
 cp .env.example .env
 
-# Add your API keys to .env
+# Add your API keys to .env:
 # ANTHROPIC_API_KEY=your_key
+# GOOGLE_API_KEY=your_key
 # KALIMAT_API_KEY=your_key
 ```
 
-### Usage
-
-**Simple Query:**
-
-```python
-from ansari_agent.core import AnsariAgent
-import anyio
-
-async def main():
-    agent = AnsariAgent()
-    await agent.connect()
-
-    try:
-        response = await agent.query("What does the Quran say about patience?")
-        print(response)
-    finally:
-        await agent.disconnect()
-
-anyio.run(main)
-```
-
-**Run Examples:**
+### Running Locally
 
 ```bash
-# Simple single query
-env PYTHONPATH=src uv run python examples/simple_query.py
+# Start the FastAPI server
+PYTHONPATH=src uv run uvicorn model_comparison.app:app --reload
 
-# Multi-user simulation
-env PYTHONPATH=src uv run python examples/multi_user_simulation.py
+# Access the interface at http://localhost:8000
 ```
 
-## Architecture
+### Configuration
 
+Key settings in `src/model_comparison/config.py`:
+- `MAX_SESSIONS`: Maximum concurrent sessions (default: 50)
+- `SESSION_TTL_SECONDS`: Session timeout (default: 1800)
+- `MAX_HISTORY_TURNS`: Conversation history depth (default: 5)
+- `WARM_UP_CLIENTS`: Pre-warm API clients on startup (default: true)
+
+## API Endpoints
+
+### Query Submission
 ```
-User → AnsariAgent → ClaudeSDKClient → Claude CLI → Anthropic API
-                  ↓
-            SearchQuran Tool → Kalimat API
-```
+POST /api/query
+Authorization: Basic <credentials>
+Content-Type: application/json
 
-### Key Components
+{
+  "message": "What does the Quran say about patience?"
+}
 
-- **AnsariAgent** ([src/ansari_agent/core/agent.py](src/ansari_agent/core/agent.py))
-  - Wraps ClaudeSDKClient
-  - Manages connection lifecycle
-  - Provides simple query/stream interfaces
-
-- **SearchQuran Tool** ([src/ansari_agent/tools/search_quran.py](src/ansari_agent/tools/search_quran.py))
-  - SDK tool decorator pattern
-  - Async Kalimat API integration
-  - Returns structured content with citation metadata
-
-## Multi-User Support
-
-Each user requires:
-- Separate `AnsariAgent` instance
-- Unique `session_id` for conversation continuity
-- Independent connection lifecycle
-
-**Example:**
-
-```python
-# User 1
-agent1 = AnsariAgent()
-await agent1.connect()
-response1 = await agent1.query("Question 1", session_id="user_1")
-
-# User 2 (concurrent)
-agent2 = AnsariAgent()
-await agent2.connect()
-response2 = await agent2.query("Question 2", session_id="user_2")
+Response: {
+  "session_id": "uuid-string"
+}
 ```
 
-See [examples/multi_user_simulation.py](examples/multi_user_simulation.py) for full example.
+### Streaming Responses
+```
+GET /api/stream/{session_id}
+Authorization: Basic <credentials>
+Accept: text/event-stream
 
-## Testing
+Returns: Server-Sent Events stream with model responses
+```
+
+## Deployment
+
+### Railway Deployment
+
+The application is configured for Railway deployment with automatic builds:
 
 ```bash
-# Test SearchQuran tool
-env PYTHONPATH=src uv run python tests/test_search_quran.py
+# Deploy to Railway
+railway up
 
-# Test full agent
-env PYTHONPATH=src uv run python tests/test_agent.py
+# Set environment variables
+railway variables set ANTHROPIC_API_KEY=your_key
+railway variables set GOOGLE_API_KEY=your_key
+railway variables set KALIMAT_API_KEY=your_key
 ```
 
-## Evaluation Results
+See [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) for detailed deployment instructions.
 
-**What Works:**
-- ✅ Tool integration (SearchQuran successfully integrated)
-- ✅ Citation metadata preserved through tool calls
-- ✅ Multi-turn conversations via session IDs
-- ✅ Concurrent users (separate agent instances)
-- ✅ Streaming responses
+## Performance
 
-**Architecture Notes:**
-- SDK requires Claude Code CLI (spawns subprocess per agent)
-- Each agent instance = one CLI subprocess
-- Session state managed via session_id parameter
-- External conversation persistence still needed for production
+Optimizations implemented:
+- **LLM Client Caching**: Singleton pattern with `@lru_cache` reduces initialization overhead
+- **Graph Pre-compilation**: LangGraph instances compiled at startup
+- **Connection Pooling**: Reused HTTP connections for API calls
+- **Concurrent Execution**: `asyncio.TaskGroup` for parallel model queries
 
-**Full Evaluation:** See [codev/reviews/0001-claude-sdk-evaluation.md](codev/reviews/0001-claude-sdk-evaluation.md)
+Results:
+- Initial response time: 73-83 seconds
+- Optimized response time: 8-29 seconds (3-9x improvement)
+- TTFT (Time to First Token): <1 second for all models
 
 ## Project Structure
 
 ```
 ansari-agent/
-├── src/ansari_agent/
-│   ├── core/
-│   │   └── agent.py          # Main agent implementation
-│   ├── tools/
-│   │   └── search_quran.py   # SearchQuran tool
-│   └── utils/
-│       ├── config.py          # Configuration management
-│       └── logger.py          # Logging setup
-├── tests/
-│   ├── test_agent.py          # Agent integration tests
-│   └── test_search_quran.py   # Tool tests
-├── examples/
-│   ├── simple_query.py        # Basic usage
-│   └── multi_user_simulation.py  # Multi-user example
-└── codev/
+├── src/
+│   ├── model_comparison/      # FastAPI application
+│   │   ├── app.py             # Main application
+│   │   ├── endpoints.py       # API routes
+│   │   ├── streaming.py       # SSE utilities
+│   │   ├── session.py         # Session management
+│   │   └── langgraph_adapter.py # LangGraph integration
+│   ├── ansari_langgraph/      # Claude integration
+│   │   ├── agent.py           # LangGraph agent
+│   │   ├── nodes.py           # Graph nodes
+│   │   └── tools.py           # Tool definitions
+│   └── ansari_gemini/         # Gemini integration
+│       ├── agent.py           # Gemini agent
+│       ├── nodes.py           # Graph nodes
+│       └── tools.py           # Tool definitions
+├── tests/                     # Test suite
+├── legacy/                    # Deprecated Claude SDK code
+└── codev/                     # Development documentation
     ├── specs/                 # Feature specifications
     ├── plans/                 # Implementation plans
-    └── reviews/               # Evaluation reviews
+    └── reviews/               # Code reviews
 ```
 
 ## Development
 
-This project uses the Codev/SPIDER protocol for development:
+### Testing
 
-- **Specification**: [codev/specs/0001-claude-sdk-evaluation.md](codev/specs/0001-claude-sdk-evaluation.md)
-- **Plan**: [codev/plans/0001-claude-sdk-evaluation.md](codev/plans/0001-claude-sdk-evaluation.md)
-- **Review**: [codev/reviews/0001-claude-sdk-evaluation.md](codev/reviews/0001-claude-sdk-evaluation.md)
+```bash
+# Run all tests
+PYTHONPATH=src uv run pytest tests/ -v
+
+# Run specific test
+PYTHONPATH=src uv run pytest tests/test_langgraph_integration.py -v
+```
+
+### Adding a New Model
+
+1. Create a new integration module in `src/`
+2. Implement the agent following the LangGraph pattern
+3. Add model configuration to `config.py`
+4. Update `langgraph_adapter.py` to support the new model
+
+## Contributing
+
+This project follows the Codev/SPIDER protocol for development. See [codev/protocols/](codev/protocols/) for methodology details.
 
 ## License
 
 MIT
+
+## Acknowledgments
+
+- Built with [LangGraph](https://github.com/langchain-ai/langgraph) for agent orchestration
+- Uses [Kalimat API](https://api.kalimat.dev) for Quran search
+- Deployed on [Railway](https://railway.app)

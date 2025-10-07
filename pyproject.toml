@@ -9,18 +9,15 @@ description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.69.0",
-    "claude-agent-sdk==0.1.0",
     "fastapi>=0.118.0",
     "google-generativeai>=0.8.5",
     "httpx>=0.28.1",
     "langchain-anthropic>=0.3.21",
     "langchain-google-genai>=2.0.10",
     "langgraph>=0.6.8",
-    "playwright>=1.55.0",
     "psutil>=7.1.0",
     "python-dotenv>=1.1.1",
     "rich>=14.1.0",
-    "sse-starlette>=3.0.2",
     "typer>=0.19.2",
     "uvicorn>=0.37.0",
 ]
@@ -35,7 +32,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ansari_agent", "src/ansari_langgraph", "src/ansari_gemini", "src/model_comparison"]
+packages = ["src/ansari_langgraph", "src/ansari_gemini", "src/model_comparison"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -1,9 +1,7 @@
-# Specification: Model Comparison Web UI
+# Model Comparison UI Specification
 
-## Metadata
-- **ID**: spec-2025-10-06-model-comparison-ui
-- **Status**: draft
-- **Created**: 2025-10-06
+## Overview
+A high-performance web interface for comparing responses from multiple LLM models (Claude Opus/Sonnet, Gemini Pro/Flash) in real-time, with integrated Quran search capabilities via the Kalimat API.
 
 ## Clarifying Questions Asked
 

@@ -55,6 +55,12 @@ class Config:
             raise RuntimeError("GOOGLE_API_KEY environment variable is required")
         return key
 
+    # Startup configuration
+    @property
+    def warm_up_clients(self) -> bool:
+        """Get whether to warm up clients on startup (default: true)."""
+        return os.getenv("WARM_UP_CLIENTS", "true").lower() == "true"
+
     # Auth (optional - disable by not setting AUTH_PASSWORD)
     @property
     def auth_username(self) -> str:

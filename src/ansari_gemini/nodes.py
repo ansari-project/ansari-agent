@@ -1,9 +1,10 @@
-"""Graph nodes for Ansari LangGraph implementation."""
+"""Graph nodes for Ansari Gemini implementation."""
 
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
-from ansari_agent.utils import setup_logger
-from ansari_langgraph.state import AnsariState
-from ansari_langgraph.tools import search_quran
+from ansari_agent.utils import config, setup_logger
+from ansari_gemini.state import AnsariState
+from ansari_gemini.tools import search_quran
 
 logger = setup_logger(__name__)
 
@@ -18,15 +19,27 @@ When answering questions about Islam, the Quran, or Islamic teachings:
 - Cite your sources using the ayah references"""
 
 
-def create_agent_node(llm_with_tools):
-    """Create an agent node with a pre-configured LLM client.
+def create_agent_node(model: str = "gemini-2.5-pro"):
+    """Create an agent node with the specified Gemini model.
 
     Args:
-        llm_with_tools: A pre-configured LangChain runnable (LLM bound with tools)
+        model: Gemini model name (gemini-2.5-pro or gemini-2.5-flash)
 
     Returns:
         Agent node function
     """
+    # Initialize ChatGoogleGenerativeAI with specified model
+    # NOTE: Streaming is disabled because ainvoke() doesn't populate response.content when streaming=True
+    llm = ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=config.GOOGLE_API_KEY,
+        max_tokens=16384,  # Allow longer responses
+        temperature=0,
+        streaming=False,  # Must be False for non-streaming ainvoke() path. Streaming handled via astream_events in agent.py
+    )
+
+    # Bind tools to the LLM
+    llm_with_tools = llm.bind_tools([search_quran])
 
     async def agent_node(state: AnsariState) -> AnsariState:
         """Agent node - calls LLM with tools using LangChain."""
@@ -35,44 +48,80 @@ def create_agent_node(llm_with_tools):
         messages = state.get("messages", [])
         tool_call_count = state.get("tool_call_count", 0)
 
-        # CRITICAL GUARDRAIL: Limit tool calls to prevent infinite loops
+        # CRITICAL GUARDRAIL: Limit tool calls to prevent infinite loops (Gemini issue)
         MAX_TOOL_CALLS = 5
 
-        # Convert Anthropic message format to LangChain format
-        lc_messages = [SystemMessage(content=SYSTEM_MESSAGE)]
-
-        # If we've hit the tool call limit, force a final answer
         if tool_call_count >= MAX_TOOL_CALLS:
-            logger.warning(f"Reached MAX_TOOL_CALLS limit ({MAX_TOOL_CALLS}). Forcing final answer.")
-            lc_messages.append(SystemMessage(content=f"You have reached the maximum number of tool calls ({MAX_TOOL_CALLS}). Please provide your final answer now without using any more tools."))
+            logger.warning(f"Tool call limit reached ({tool_call_count} calls). Forcing final answer.")
+
+            # Force LLM to answer without tools
+            lc_messages = [
+                SystemMessage(content=SYSTEM_MESSAGE),
+                HumanMessage(content="You have made several searches. Please provide a final answer based on the information you've gathered. Do not call any more tools.")
+            ]
+
+            # Add conversation history (just the tool results)
+            for msg in messages:
+                if msg["role"] == "user":
+                    content = msg.get("content", "")
+                    if isinstance(content, list) and len(content) > 0 and content[0].get("type") == "tool_result":
+                        for tool_result_block in content:
+                            lc_messages.append(ToolMessage(
+                                content=tool_result_block["content"],
+                                tool_call_id=tool_result_block["tool_use_id"],
+                            ))
+
+            # Call WITHOUT tools to force answer
+            response = await llm.ainvoke(lc_messages)
+
+            # Track token usage
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                input_tokens = state.get("input_tokens", 0)
+                output_tokens = state.get("output_tokens", 0)
+
+                input_tokens += response.usage_metadata.get("input_tokens", 0)
+                output_tokens += response.usage_metadata.get("output_tokens", 0)
+
+                state["input_tokens"] = input_tokens
+                state["output_tokens"] = output_tokens
+
+            # Mark as forced answer
+            state["forced_answer"] = True
+            state["final_response"] = response.content
+            state["stop_reason"] = "end_turn"
+
+            messages.append({
+                "role": "assistant",
+                "content": response.content,
+            })
+            state["messages"] = messages
+
+            return state
+
+        # Normal flow: Convert to LangChain format
+        lc_messages = [SystemMessage(content=SYSTEM_MESSAGE)]
 
         for msg in messages:
             if msg["role"] == "user":
-                content = msg["content"]
-
-                # Check if content contains tool_result blocks
-                if isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get("type") == "tool_result":
-                    # Convert tool_result blocks to ToolMessage objects
-                    for tool_result in content:
+                # Check if this is a tool result message
+                content = msg.get("content", "")
+                if isinstance(content, list) and len(content) > 0 and content[0].get("type") == "tool_result":
+                    # This is a tool result - convert to ToolMessage
+                    for tool_result_block in content:
                         lc_messages.append(ToolMessage(
-                            content=tool_result["content"],
-                            tool_call_id=tool_result["tool_use_id"],
+                            content=tool_result_block["content"],
+                            tool_call_id=tool_result_block["tool_use_id"],
                         ))
                 else:
                     # Regular user message
                     lc_messages.append(HumanMessage(content=content))
-
             elif msg["role"] == "assistant":
-                # Check if this message has tool_calls
-                tool_calls = msg.get("tool_calls")
-                if tool_calls:
-                    # Create AIMessage with tool_calls
-                    lc_messages.append(AIMessage(
-                        content=msg.get("content", ""),
-                        tool_calls=tool_calls,
-                    ))
+                # CRITICAL: Restore tool_calls so Gemini knows it already called them
+                tc = msg.get("tool_calls")
+                if tc:
+                    lc_messages.append(AIMessage(content=msg.get("content", ""), tool_calls=tc))
                 else:
-                    lc_messages.append(AIMessage(content=msg["content"]))
+                    lc_messages.append(AIMessage(content=msg.get("content", "")))
 
         # Call LLM with tools
         response = await llm_with_tools.ainvoke(lc_messages)
@@ -97,20 +146,22 @@ def create_agent_node(llm_with_tools):
                 tool_calls.append({
                     "id": tool_call["id"],
                     "name": tool_call["name"],
-                    "args": tool_call["args"],
+                    "input": tool_call["args"],
                 })
                 logger.info(f"Tool call: {tool_call['name']} with input: {tool_call['args']}")
 
             state["tool_calls"] = tool_calls
             state["stop_reason"] = "tool_use"
 
-            # Add assistant message with tool_use to history (in Anthropic format)
-            # LangChain's response.content may be empty when there are tool calls
-            # Store tool_calls in the message so we can reconstruct proper LangChain messages
+            # Add assistant message with tool_use to history
+            # CRITICAL: Must preserve tool_calls so Gemini remembers it made them
             messages.append({
                 "role": "assistant",
                 "content": response.content or "",
-                "tool_calls": tool_calls,
+                "tool_calls": [
+                    {"id": tc["id"], "name": tc["name"], "args": tc["args"]}
+                    for tc in response.tool_calls
+                ],
             })
             state["messages"] = messages
 
@@ -118,8 +169,10 @@ def create_agent_node(llm_with_tools):
             # No tool calls - this is the final response
             logger.debug("LLM returned final response")
 
-            # Handle both string and list content formats
+            # Gemini may return empty content - use .text property if available
             final_text = response.content
+            if not final_text and hasattr(response, 'text'):
+                final_text = response.text
             if isinstance(final_text, list):
                 # Extract text from content blocks
                 final_text = "".join(
@@ -127,10 +180,11 @@ def create_agent_node(llm_with_tools):
                     for block in final_text
                 )
 
-            # Log warning if response is empty
-            if not final_text:
-                logger.warning(f"Empty final response from LLM. Response type: {type(response.content)}, Raw content: {response.content}")
-                logger.warning(f"Full response object: {response}")
+            # Ensure final_text is a string
+            if not isinstance(final_text, str):
+                final_text = str(final_text) if final_text else ""
+
+            logger.info(f"Final text extracted: {len(final_text)} chars")
 
             state["final_response"] = final_text
             state["stop_reason"] = "end_turn"
@@ -150,14 +204,14 @@ def create_agent_node(llm_with_tools):
 
 
 async def tool_node(state: AnsariState) -> AnsariState:
-    """Tool node - executes tools and formats results for Anthropic."""
+    """Tool node - executes tools and formats results."""
     logger.debug("→ Tool node executing...")
 
     tool_calls = state.get("tool_calls", [])
     messages = state.get("messages", [])
-
-    # Update tool call counter
     tool_call_count = state.get("tool_call_count", 0)
+
+    # Increment tool call counter
     tool_call_count += len(tool_calls)
     state["tool_call_count"] = tool_call_count
     logger.debug(f"Tool call count: {tool_call_count}")
@@ -166,7 +220,7 @@ async def tool_node(state: AnsariState) -> AnsariState:
 
     for tool_call in tool_calls:
         tool_name = tool_call["name"]
-        tool_input = tool_call["args"]
+        tool_input = tool_call["input"]
         tool_id = tool_call["id"]
 
         logger.info(f"Executing tool: {tool_name}")
@@ -180,17 +234,14 @@ async def tool_node(state: AnsariState) -> AnsariState:
 
         tool_results.append({
             "tool_use_id": tool_id,
-            "tool_name": tool_name,
-            "tool_input": tool_input,
             "result": result,
         })
 
         logger.debug(f"Tool result: {result.get('count', 0)} ayahs found")
 
-    # Format tool results for Anthropic (must include tool_use_id and content)
+    # Format tool results
     tool_result_blocks = []
     for tr in tool_results:
-        # Format the result as text with citations
         result_data = tr["result"]
 
         if "error" in result_data:

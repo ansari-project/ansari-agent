@@ -62,8 +62,11 @@ async def lifespan(app: FastAPI):
                 logger.error(f"  - Failed to warm up {model_id}: {e}", exc_info=True)
         logger.info("LLM client warm-up complete")
 
-    # Start warm-up as a non-blocking background task
-    asyncio.create_task(warm_up_clients())
+    # Start warm-up as a non-blocking background task (if enabled)
+    if config.warm_up_clients:
+        asyncio.create_task(warm_up_clients())
+    else:
+        logger.info("Client warm-up disabled by configuration")
 
     # Start background cleanup task
     await session_manager.start_cleanup_task()
